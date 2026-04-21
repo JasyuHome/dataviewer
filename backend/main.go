@@ -10,9 +10,15 @@ import (
 	"dataviewer/backend/services"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using environment variables")
+	}
+
 	// Load configuration
 	cfg := config.Load()
 
@@ -34,6 +40,19 @@ func main() {
 	uploadHandler := handlers.NewUploadHandler(csvService, dbService, cfg.StoragePath)
 	queryHandler := handlers.NewQueryHandler(dbService)
 	chartHandler := handlers.NewChartHandler(dbService)
+
+	// Initialize Notion service if configured
+	var notionHandler *handlers.NotionHandler
+	if cfg.NotionAPIKey != "" {
+		notionService := services.NewNotionService(&services.NotionConfig{
+			APIKey:        cfg.NotionAPIKey,
+			NotionVersion: cfg.NotionVersion,
+		})
+		notionHandler = handlers.NewNotionHandler(notionService, dbService)
+		log.Println("Notion integration enabled")
+	} else {
+		log.Println("Notion integration not configured (set NOTION_API_KEY to enable)")
+	}
 
 	// Setup Gin router
 	r := gin.Default()
@@ -68,6 +87,25 @@ func main() {
 		// Chart endpoints
 		api.POST("/charts/generate", chartHandler.GenerateChart)
 		api.GET("/charts/:tableName/data", chartHandler.GetChartData)
+
+		// Notion endpoints (if configured)
+		if notionHandler != nil {
+			notion := api.Group("/notion")
+			{
+				notion.GET("/databases", notionHandler.ListDatabases)
+				notion.GET("/databases/:databaseID", notionHandler.GetDatabase)
+				notion.POST("/databases/:databaseID/query", notionHandler.QueryDatabase)
+				notion.POST("/pages", notionHandler.CreatePage)
+				notion.PUT("/pages/:pageID", notionHandler.UpdatePage)
+				notion.DELETE("/pages/:pageID", notionHandler.DeletePage)
+				notion.GET("/search", notionHandler.Search)
+				// Notion table cache endpoints
+				notion.POST("/save", notionHandler.SaveNotionData)
+				notion.POST("/sync", notionHandler.SyncNotionData)
+				notion.GET("/tables", notionHandler.ListNotionTables)
+				notion.DELETE("/tables/:tableName", notionHandler.DeleteNotionTable)
+			}
+		}
 	}
 
 	// Health check endpoint

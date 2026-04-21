@@ -7,24 +7,22 @@ import {
   DeleteOutlined,
   ExportOutlined,
 } from '@ant-design/icons';
-import { queryData, getTableStructure, exportToCSV, getFiles } from '../services/api.ts';
-import type { Condition, QueryResult, FileMetadata } from '../types/index.ts';
+import { queryData, getTableStructure, exportToCSV, getFiles, listNotionTables } from '../services/api.ts';
+import type { Condition, QueryResult, FileMetadata, NotionTableInfo } from '../types/index.ts';
 import { useLocation } from 'react-router-dom';
 
 const { Text } = Typography;
 
 const DataQuery: React.FC = () => {
   const location = useLocation();
-  const [tables, setTables] = useState<FileMetadata[]>([]);
+  const [tables, setTables] = useState<Array<{ id: number | string; table_name: string; source?: 'csv' | 'notion' }>>([]);
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [columns, setColumns] = useState<{ name: string; type: string; displayName?: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
 
-  // Query conditions
-  const [conditions, setConditions] = useState<Condition[]>([
-    { field: '', operator: 'eq', value: '' },
-  ]);
+  // Query conditions - start with empty array, add condition when field is selected
+  const [conditions, setConditions] = useState<Condition[]>([]);
   const [logic, setLogic] = useState<'AND' | 'OR'>('AND');
 
   // Pagination
@@ -42,10 +40,21 @@ const DataQuery: React.FC = () => {
     }
   }, []);
 
+  // Note: Pagination-triggered queries are handled by the useEffect below (lines 133-157)
+  // which runs silently without showing success messages
+
   const loadTables = async () => {
     try {
-      const data = await getFiles();
-      setTables(data);
+      // Load CSV file tables
+      const csvData = await getFiles();
+      // Load Notion tables
+      const notionData = await listNotionTables();
+      // Merge both lists
+      const allTables = [
+        ...csvData.map((t) => ({ id: t.id, table_name: t.table_name, source: 'csv' as const })),
+        ...notionData.tables.map((t) => ({ id: t.id, table_name: t.table_name, source: 'notion' as const })),
+      ];
+      setTables(allTables);
     } catch (error) {
       message.error('Failed to load tables');
     }
@@ -59,9 +68,6 @@ const DataQuery: React.FC = () => {
         displayName: col.original || col.name,
       }));
       setColumns(columnsWithOriginal);
-      if (columnsWithOriginal.length > 0) {
-        setConditions([{ field: columnsWithOriginal[0].name, operator: 'eq', value: '' }]);
-      }
     } catch (error) {
       message.error('Failed to load table structure');
     }
@@ -69,8 +75,9 @@ const DataQuery: React.FC = () => {
 
   const handleTableChange = (tableName: string) => {
     setSelectedTable(tableName);
-    loadColumns(tableName);
+    setConditions([]); // Clear conditions when switching table
     setQueryResult(null);
+    loadColumns(tableName);
   };
 
   const addCondition = () => {
@@ -78,7 +85,11 @@ const DataQuery: React.FC = () => {
   };
 
   const removeCondition = (index: number) => {
-    if (conditions.length === 1) return;
+    if (conditions.length === 1) {
+      // Clear all conditions when removing the last one
+      setConditions([]);
+      return;
+    }
     setConditions(conditions.filter((_, i) => i !== index));
   };
 
@@ -113,6 +124,33 @@ const DataQuery: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Re-execute query when pagination or sorting changes (silent, no success message)
+  useEffect(() => {
+    if (!selectedTable || !queryResult) return;
+
+    const executeSilent = async () => {
+      setLoading(true);
+      try {
+        const result = await queryData({
+          table_name: selectedTable,
+          page,
+          page_size: pageSize,
+          sort_field: sortField,
+          sort_order: sortOrder,
+          conditions: conditions.filter((c) => c.field && c.value !== ''),
+          logic,
+        });
+        setQueryResult(result);
+      } catch (error: any) {
+        message.error(error.response?.data?.error || 'Query failed');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    executeSilent();
+  }, [page, pageSize, sortField, sortOrder]);
 
   const handleExport = () => {
     if (selectedTable) {
@@ -156,67 +194,72 @@ const DataQuery: React.FC = () => {
           <Col span={12}>
             <Space direction="vertical" size="small" style={{ width: '100%' }}>
               <Text strong>Conditions:</Text>
-              <Space wrap>
-                {conditions.map((condition, index) => (
-                  <Space key={index} align="start">
-                    {index === 0 ? <Text>WHERE</Text> : <Text>{logic}</Text>}
-                    <Select
-                      value={condition.field}
-                      onChange={(value) => updateCondition(index, 'field', value)}
-                      style={{ width: 120 }}
-                      placeholder="Field"
-                      options={columns.map((c) => ({ label: c.displayName || c.name, value: c.name }))}
-                    />
-                    <Select
-                      value={condition.operator}
-                      onChange={(value) => updateCondition(index, 'operator', value)}
-                      style={{ width: 90 }}
-                      options={[
-                        { label: '=', value: 'eq' },
-                        { label: '≠', value: 'ne' },
-                        { label: '>', value: 'gt' },
-                        { label: '<', value: 'lt' },
-                        { label: '≥', value: 'gte' },
-                        { label: '≤', value: 'lte' },
-                        { label: 'Contains', value: 'like' },
-                        { label: 'In', value: 'in' },
-                        { label: 'Between', value: 'between' },
-                      ]}
-                    />
-                    <Input
-                      value={condition.value}
-                      onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                      placeholder="Value"
-                      style={{ width: 100 }}
-                    />
-                    <Button
-                      type="text"
-                      danger
-                      icon={<DeleteOutlined />}
-                      onClick={() => removeCondition(index)}
-                      disabled={conditions.length === 1}
-                    />
-                  </Space>
-                ))}
-              </Space>
+              {conditions.length === 0 ? (
+                <Text type="secondary">No conditions (querying all data)</Text>
+              ) : (
+                <Space wrap>
+                  {conditions.map((condition, index) => (
+                    <Space key={index} align="start">
+                      {index === 0 ? <Text>WHERE</Text> : <Text>{logic}</Text>}
+                      <Select
+                        value={condition.field}
+                        onChange={(value) => updateCondition(index, 'field', value)}
+                        style={{ width: 120 }}
+                        placeholder="Field"
+                        options={columns.map((c) => ({ label: c.displayName || c.name, value: c.name }))}
+                      />
+                      <Select
+                        value={condition.operator}
+                        onChange={(value) => updateCondition(index, 'operator', value)}
+                        style={{ width: 90 }}
+                        options={[
+                          { label: '=', value: 'eq' },
+                          { label: '≠', value: 'ne' },
+                          { label: '>', value: 'gt' },
+                          { label: '<', value: 'lt' },
+                          { label: '≥', value: 'gte' },
+                          { label: '≤', value: 'lte' },
+                          { label: 'Contains', value: 'like' },
+                          { label: 'In', value: 'in' },
+                          { label: 'Between', value: 'between' },
+                        ]}
+                      />
+                      <Input
+                        value={condition.value}
+                        onChange={(e) => updateCondition(index, 'value', e.target.value)}
+                        placeholder="Value"
+                        style={{ width: 100 }}
+                      />
+                      <Button
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => removeCondition(index)}
+                      />
+                    </Space>
+                  ))}
+                </Space>
+              )}
               <Space>
                 <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={addCondition}>
-                  Add
+                  Add Condition
                 </Button>
-                <Switch
-                  size="small"
-                  checked={logic === 'AND'}
-                  onChange={(checked) => setLogic(checked ? 'AND' : 'OR')}
-                  checkedChildren="AND"
-                  unCheckedChildren="OR"
-                />
+                {conditions.length > 0 && (
+                  <Switch
+                    size="small"
+                    checked={logic === 'AND'}
+                    onChange={(checked) => setLogic(checked ? 'AND' : 'OR')}
+                    checkedChildren="AND"
+                    unCheckedChildren="OR"
+                  />
+                )}
               </Space>
             </Space>
           </Col>
 
           {/* Sorting & Pagination */}
           <Col span={6}>
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Space style={{ width: '100%' }} direction="vertical" size="small">
               <Text strong>Sorting & Pagination:</Text>
               <Space wrap>
                 <Select
@@ -278,7 +321,6 @@ const DataQuery: React.FC = () => {
         <Card
           title={`Results: ${queryResult.total} total records (Page ${queryResult.page}/${queryResult.total_pages})`}
           size="small"
-          style={{ maxHeight: 'calc(100vh - 350px)', overflow: 'auto' }}
         >
           <Table
             columns={tableColumns}
@@ -291,9 +333,10 @@ const DataQuery: React.FC = () => {
                 setPage(p);
                 setPageSize(ps);
               },
+              position: ['bottomRight'],
             }}
             loading={loading}
-            scroll={{ x: true }}
+            scroll={{ x: true, y: 'calc(100vh - 400px)' }}
             size="small"
           />
         </Card>

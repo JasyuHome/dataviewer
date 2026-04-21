@@ -6,12 +6,14 @@ import {
   SearchOutlined,
   BarChartOutlined,
   SettingOutlined,
+  CloudOutlined,
 } from '@ant-design/icons';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Home from './pages/Home.tsx';
 import DataManage from './pages/DataManage.tsx';
 import DataQuery from './pages/DataQuery.tsx';
 import DataViz from './pages/DataViz.tsx';
+import Notion from './pages/Notion.tsx';
 import Settings from './pages/Settings.tsx';
 
 const { Header, Content, Footer } = Layout;
@@ -28,6 +30,7 @@ const AppContent: React.FC = () => {
     { key: '/manage', icon: <TableOutlined />, label: 'Data Management' },
     { key: '/query', icon: <SearchOutlined />, label: 'Data Query' },
     { key: '/viz', icon: <BarChartOutlined />, label: 'Data Visualization' },
+    { key: '/notion', icon: <CloudOutlined />, label: 'Notion' },
     { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
   ];
 
@@ -52,6 +55,7 @@ const AppContent: React.FC = () => {
           <Route path="/manage" element={<DataManage />} />
           <Route path="/query" element={<DataQuery />} />
           <Route path="/viz" element={<DataViz />} />
+          <Route path="/notion" element={<Notion />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Content>

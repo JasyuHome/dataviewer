@@ -5,7 +5,12 @@ import type {
   QueryParams,
   QueryResult,
   ChartParams,
-  ChartResponse
+  ChartResponse,
+  NotionDatabase,
+  NotionPage,
+  NotionQueryRequest,
+  NotionCreatePageRequest,
+  NotionTableInfo,
 } from '../types';
 
 const API_BASE_URL = '/api';
@@ -95,4 +100,97 @@ export const getChartData = async (
 export const healthCheck = async (): Promise<{ status: string; version: string }> => {
   const response = await api.get('/health');
   return response.data as { status: string; version: string };
+};
+
+// Notion APIs
+export const listNotionDatabases = async (): Promise<NotionDatabase[]> => {
+  const response = await api.get<{ databases: NotionDatabase[] }>('/notion/databases');
+  return response.data.databases;
+};
+
+export const getNotionDatabase = async (databaseID: string): Promise<NotionDatabase> => {
+  const response = await api.get<NotionDatabase>(`/notion/databases/${databaseID}`);
+  return response.data;
+};
+
+export const queryNotionDatabase = async (
+  databaseID: string,
+  filter?: Record<string, any>,
+  sorts?: Array<{ property: string; direction: string }>,
+  pageSize?: number
+): Promise<{ results: NotionPage[]; has_more: boolean; next_cursor: string }> => {
+  const response = await api.post(`/notion/databases/${databaseID}/query`, {
+    filter,
+    sorts,
+    page_size: pageSize,
+  });
+  return response.data;
+};
+
+export const createNotionPage = async (
+  databaseID: string,
+  properties: Record<string, any>
+): Promise<{ id: string; url: string; properties: Record<string, any> }> => {
+  const response = await api.post('/notion/pages', {
+    database_id: databaseID,
+    properties,
+  });
+  return response.data;
+};
+
+export const updateNotionPage = async (
+  pageID: string,
+  properties: Record<string, any>
+): Promise<{ id: string; url: string; properties: Record<string, any> }> => {
+  const response = await api.put(`/notion/pages/${pageID}`, {
+    properties,
+  });
+  return response.data;
+};
+
+export const deleteNotionPage = async (pageID: string): Promise<void> => {
+  await api.delete(`/notion/pages/${pageID}`);
+};
+
+export const searchNotion = async (
+  query: string,
+  filter?: string
+): Promise<{ results: NotionPage[] }> => {
+  const response = await api.get('/notion/search', {
+    params: { q: query, filter },
+  });
+  return response.data;
+};
+
+// Notion table cache APIs
+export type { NotionTableInfo };
+
+export const saveNotionData = async (
+  databaseID: string,
+  tableName: string
+): Promise<{ message: string; table_name: string; row_count: number }> => {
+  const response = await api.post('/notion/save', {
+    database_id: databaseID,
+    table_name: tableName,
+  });
+  return response.data;
+};
+
+export const syncNotionData = async (
+  tableName: string
+): Promise<{ message: string; table_name: string; row_count: number }> => {
+  const response = await api.post('/notion/sync', {
+    table_name: tableName,
+  });
+  return response.data;
+};
+
+export const listNotionTables = async (): Promise<{ tables: NotionTableInfo[] }> => {
+  const response = await api.get('/notion/tables');
+  return response.data;
+};
+
+export const deleteNotionTable = async (tableName: string): Promise<{ message: string }> => {
+  const response = await api.delete(`/notion/tables/${tableName}`);
+  return response.data;
 };

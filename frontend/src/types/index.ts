@@ -74,6 +74,52 @@ export interface ChartResponse {
   y_field: string;
 }
 
+// Notion types
+export interface NotionDatabase {
+  object: string;
+  id: string;
+  created_time: string;
+  last_edited_time: string;
+  title: Array<{ type: string; plain_text: string; text: { content: string } }>;
+  url: string;
+  properties: Record<string, any>;
+}
+
+export interface NotionPage {
+  object: string;
+  id: string;
+  created_time: string;
+  last_edited_time: string;
+  properties: Record<string, any>;
+  url: string;
+}
+
+export interface NotionQueryRequest {
+  database_id: string;
+  filter?: Record<string, any>;
+  sorts?: Array<{ property: string; direction: string }>;
+  page_size?: number;
+}
+
+export interface NotionCreatePageRequest {
+  database_id: string;
+  properties: Record<string, any>;
+}
+
+export interface NotionSearchRequest {
+  query: string;
+  filter?: string;
+}
+
+export interface NotionTableInfo {
+  id: number;
+  table_name: string;
+  notion_database_id: string;
+  last_sync_time: string;
+  row_count: number;
+  created_at: string;
+}
+
 // API response types
 export interface ApiResponse<T> {
   data?: T;

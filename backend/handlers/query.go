@@ -69,7 +69,7 @@ func (h *QueryHandler) QueryData(c *gin.Context) {
 	}
 
 	// Get total count with conditions
-	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s%s", params.TableName, whereClause)
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM \"%s\"%s", params.TableName, whereClause)
 	var total int64
 	if err := h.dbService.GetDB().QueryRow(countSQL, args...).Scan(&total); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count records: " + err.Error()})
@@ -91,7 +91,7 @@ func (h *QueryHandler) QueryData(c *gin.Context) {
 	offset := (params.Page - 1) * params.PageSize
 
 	// Build query SQL - sortOrder is safe as it's validated above
-	querySQL := fmt.Sprintf("SELECT * FROM %s%s ORDER BY %s %s LIMIT ? OFFSET ?",
+	querySQL := fmt.Sprintf("SELECT * FROM \"%s\"%s ORDER BY %s %s LIMIT ? OFFSET ?",
 		params.TableName, whereClause, sortField, sortOrder)
 
 	// Add limit and offset to args
@@ -145,8 +145,14 @@ func (h *QueryHandler) buildConditions(conditions []models.Condition) ([]string,
 	var args []interface{}
 
 	for _, cond := range conditions {
+		// Skip conditions with empty field or empty value
+		if cond.Field == "" || cond.Value == nil || cond.Value == "" {
+			continue
+		}
+
 		field := h.validateColumnName(cond.Field)
-		if field == "" {
+		if field == "id" && cond.Field != "id" {
+			// Invalid field name
 			continue
 		}
 
@@ -199,11 +205,18 @@ func (h *QueryHandler) validateColumnName(name string) string {
 	if name == "" {
 		return "id"
 	}
-	// Only allow alphanumeric and underscore
+	// Allow letters, numbers, underscores, and CJK characters
 	for _, c := range name {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-			return "id"
+		// Allow alphanumeric and underscore
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+			continue
 		}
+		// Allow CJK characters (Chinese, Japanese, Korean)
+		if c >= 0x4E00 && c <= 0x9FFF {
+			continue
+		}
+		// Invalid character
+		return "id"
 	}
 	return name
 }
@@ -253,11 +266,18 @@ func (h *QueryHandler) GetTableStructure(c *gin.Context) {
 		return
 	}
 
-	// Get column definitions from file_metadata table
+	// Try to get column definitions from file_metadata table first
 	var columnDefsJSON string
 	err := h.dbService.GetDB().QueryRow(
 		"SELECT column_defs FROM file_metadata WHERE table_name = ?", tableName,
 	).Scan(&columnDefsJSON)
+
+	if err != nil || columnDefsJSON == "" {
+		// Try to get from notion_tables
+		err = h.dbService.GetDB().QueryRow(
+			"SELECT column_defs FROM notion_tables WHERE table_name = ?", tableName,
+		).Scan(&columnDefsJSON)
+	}
 
 	if err != nil || columnDefsJSON == "" {
 		// Fallback to PRAGMA table_info if no metadata found

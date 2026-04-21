@@ -6,10 +6,12 @@ import (
 )
 
 type Config struct {
-	ServerPort   string
-	DatabasePath string
-	StoragePath  string
-	UploadLimit  int64 // in bytes
+	ServerPort    string
+	DatabasePath  string
+	StoragePath   string
+	UploadLimit   int64 // in bytes
+	NotionAPIKey  string
+	NotionVersion string
 }
 
 func Load() *Config {
@@ -31,10 +33,12 @@ func Load() *Config {
 	}
 
 	return &Config{
-		ServerPort:   getEnv("SERVER_PORT", "9999"),
-		DatabasePath: getEnv("DATABASE_PATH", dbPath),
-		StoragePath:  getEnv("STORAGE_PATH", storagePath),
-		UploadLimit:  100 * 1024 * 1024, // 100MB default
+		ServerPort:    getEnv("SERVER_PORT", "9999"),
+		DatabasePath:  getEnv("DATABASE_PATH", dbPath),
+		StoragePath:   getEnv("STORAGE_PATH", storagePath),
+		UploadLimit:   100 * 1024 * 1024, // 100MB default
+		NotionAPIKey:  getEnv("NOTION_API_KEY", ""),
+		NotionVersion: getEnv("NOTION_VERSION", "2022-06-28"),
 	}
 }
 

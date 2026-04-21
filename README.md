@@ -16,6 +16,7 @@
 - Gin Web 框架
 - SQLite 数据库
 - encoding/csv CSV 解析
+- Resty HTTP 客户端
 
 ## 功能特性
 
@@ -42,6 +43,12 @@
 - 动态字段映射配置
 - 图表导出为 PNG 图片
 - 交互式图表（缩放、数据提示）
+
+### 5. Notion 集成
+- 连接 Notion 工作区
+- 浏览和查询 Notion 数据库
+- 创建、编辑和删除页面
+- 搜索 Notion 页面
 
 ## 项目结构
 
@@ -106,6 +113,15 @@ pnpm dev
 - `POST /api/charts/generate` - 生成图表
 - `GET /api/charts/:tableName/data` - 获取图表数据
 
+### Notion 集成
+- `GET /api/notion/databases` - 获取数据库列表
+- `GET /api/notion/databases/:id` - 获取数据库详情
+- `POST /api/notion/databases/:id/query` - 查询数据库
+- `POST /api/notion/pages` - 创建页面
+- `PUT /api/notion/pages/:id` - 更新页面
+- `DELETE /api/notion/pages/:id` - 删除页面
+- `GET /api/notion/search` - 搜索页面
+
 ## 环境变量
 
 | 变量名 | 默认值 | 描述 |
@@ -113,6 +129,8 @@ pnpm dev
 | SERVER_PORT | 8080 | 服务器端口 |
 | DATABASE_PATH | ./storage/dataviewer.db | 数据库路径 |
 | STORAGE_PATH | ./storage/uploads | 文件存储路径 |
+| NOTION_API_KEY | - | Notion API 密钥（从 https://www.notion.so/my-integrations 获取） |
+| NOTION_VERSION | 2022-06-28 | Notion API 版本 |
 
 ## 使用说明
 

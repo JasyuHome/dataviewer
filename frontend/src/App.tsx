@@ -36,7 +36,16 @@ const AppContent: React.FC = () => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', alignItems: 'center', padding: '0 24px' }}>
+      <Header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 24px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1000,
+        }}
+      >
         <div style={{ color: 'white', fontSize: 20, fontWeight: 'bold', marginRight: 24 }}>
           Data Viewer
         </div>

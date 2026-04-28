@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Space, Select, Input, InputNumber, Switch, message, Row, Col, Divider, Typography } from 'antd';
+import { Card, Table, Button, Space, Select, Input, InputNumber, Switch, message, Row, Col, Divider, Typography, theme } from 'antd';
 import {
   SearchOutlined,
   ReloadOutlined,
@@ -13,8 +13,25 @@ import { useLocation } from 'react-router-dom';
 
 const { Text } = Typography;
 
+// Custom CSS for table styling
+const tableStyles = `
+  .dataquery-table .ant-table-thead > tr > th {
+    white-space: nowrap !important;
+    font-weight: 600;
+  }
+  .dataquery-table .ant-table-tbody > tr > td {
+    white-space: normal !important;
+    word-break: break-word !important;
+    line-height: 1.5 !important;
+  }
+  .dataquery-table .ant-table-thead > tr > th .ant-table-column-title {
+    white-space: nowrap;
+  }
+`;
+
 const DataQuery: React.FC = () => {
   const location = useLocation();
+  const { token } = theme.useToken();
   const [tables, setTables] = useState<Array<{ id: number | string; table_name: string; source?: 'csv' | 'notion' }>>([]);
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [columns, setColumns] = useState<{ name: string; type: string; displayName?: string }[]>([]);
@@ -163,17 +180,44 @@ const DataQuery: React.FC = () => {
     ? Object.keys(queryResult.data[0]).map((key) => {
         // Find matching column by name to get displayName
         const colDef = columns.find((c) => c.name === key);
+        const keyLower = key.toLowerCase();
+        const isIdColumn = keyLower === 'id';
+        const isDateColumn = keyLower === 'date' || keyLower === '日期';
+        const isItemColumn = keyLower === 'item' || keyLower === '条目' || keyLower === '项目';
+        const isRemarkColumn = keyLower.includes('备注') || keyLower.includes('remark') || keyLower.includes('note') || keyLower.includes('memo');
+        const isAmountTypeColumn = keyLower.includes('金额') && keyLower.includes('类型');
+
         return {
           title: colDef?.displayName || key,
           dataIndex: key,
           key,
           sortable: true,
+          // Fixed width for specific columns
+          width: isIdColumn ? 300 : isDateColumn ? 100 : isItemColumn ? 120 : isRemarkColumn ? 400 : undefined,
+          // Keep header text on single line
+          ellipsis: !isAmountTypeColumn,
+          onHeaderCell: () => ({
+            style: {
+              whiteSpace: 'nowrap',
+              fontWeight: 600,
+            },
+          }),
+          onCell: () => ({
+            style: {
+              // Date and item columns stay on single line, remark can wrap
+              whiteSpace: isRemarkColumn ? 'normal' : 'nowrap',
+              wordBreak: isRemarkColumn ? 'break-word' : 'normal',
+              lineHeight: 1.5,
+              verticalAlign: 'top',
+            },
+          }),
         };
       })
     : [];
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      <style>{tableStyles}</style>
       <Card title="Query Builder" size="small">
         <Row gutter={[16, 16]} align="middle">
           {/* Select Table */}
@@ -323,6 +367,7 @@ const DataQuery: React.FC = () => {
           size="small"
         >
           <Table
+            className="dataquery-table"
             columns={tableColumns}
             dataSource={queryResult.data.map((row, i) => ({ key: i, ...row }))}
             pagination={{

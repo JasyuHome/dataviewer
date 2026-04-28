@@ -60,10 +60,10 @@ func (h *ChartHandler) GenerateChart(c *gin.Context) {
 	}
 
 	// Build query
-	querySQL := fmt.Sprintf(`SELECT "%s", "%s" FROM %s`, params.XField, params.YField, params.TableName)
+	querySQL := fmt.Sprintf(`SELECT "%s", "%s" FROM "%s"`, params.XField, params.YField, params.TableName)
 
 	if params.Series != "" {
-		querySQL = fmt.Sprintf(`SELECT "%s", "%s", "%s" FROM %s`, params.XField, params.YField, params.Series, params.TableName)
+		querySQL = fmt.Sprintf(`SELECT "%s", "%s", "%s" FROM "%s"`, params.XField, params.YField, params.Series, params.TableName)
 	}
 
 	querySQL += fmt.Sprintf(" LIMIT %d", params.Limit)
@@ -273,7 +273,7 @@ func (h *ChartHandler) GetChartData(c *gin.Context) {
 	}
 
 	// Build query
-	querySQL := fmt.Sprintf(`SELECT "%s", "%s" FROM %s LIMIT %d`, xField, yField, tableName, limit)
+	querySQL := fmt.Sprintf(`SELECT "%s", "%s" FROM "%s" LIMIT %d`, xField, yField, tableName, limit)
 
 	rows, err := h.dbService.GetDB().Query(querySQL)
 	if err != nil {

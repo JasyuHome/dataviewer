@@ -2,19 +2,21 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, Select, Button, Space, message, Typography } from 'antd';
 import { BarChartOutlined, LineChartOutlined, PieChartOutlined, DownloadOutlined } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
-import { generateChart, getFiles } from '../services/api.ts';
-import type { FileMetadata, ChartParams } from '../types/index.ts';
+import { generateChart, getFiles, listNotionTables, getTableStructure } from '../services/api.ts';
+import type { FileMetadata, ChartParams, NotionTableInfo } from '../types/index.ts';
 
 const { Text } = Typography;
 
 const DataViz: React.FC = () => {
-  const [tables, setTables] = useState<FileMetadata[]>([]);
+  const [tables, setTables] = useState<Array<{ id: number | string; table_name: string; source?: 'csv' | 'notion' }>>([]);
   const [selectedTable, setSelectedTable] = useState('');
   const [columns, setColumns] = useState<{ name: string; type: string; displayName?: string }[]>([]);
   const [chartType, setChartType] = useState<'bar' | 'line' | 'pie'>('bar');
   const [xField, setXField] = useState('');
   const [yField, setYField] = useState('');
   const [chartOption, setChartOption] = useState<any>(null);
+  const [chartDataCount, setChartDataCount] = useState<number>(0);
+  const [dataLimit, setDataLimit] = useState<number>(100);
   const [loading, setLoading] = useState(false);
   const chartRef = useRef<ReactECharts>(null);
   const [chartKey, setChartKey] = useState(0);
@@ -25,8 +27,16 @@ const DataViz: React.FC = () => {
 
   const loadTables = async () => {
     try {
-      const data = await getFiles();
-      setTables(data);
+      // Load CSV file tables
+      const csvData = await getFiles();
+      // Load Notion tables
+      const notionData = await listNotionTables();
+      // Merge both lists
+      const allTables = [
+        ...csvData.map((t) => ({ id: t.id, table_name: t.table_name, source: 'csv' as const })),
+        ...notionData.tables.map((t) => ({ id: t.id, table_name: t.table_name, source: 'notion' as const })),
+      ];
+      setTables(allTables);
     } catch (error) {
       message.error('Failed to load tables');
     }
@@ -34,9 +44,9 @@ const DataViz: React.FC = () => {
 
   const handleTableChange = async (tableName: string) => {
     setSelectedTable(tableName);
-    const table = tables.find((t) => t.table_name === tableName);
-    if (table?.column_defs) {
-      const columnsWithOriginal = table.column_defs.map((col) => ({
+    try {
+      const result = await getTableStructure(tableName);
+      const columnsWithOriginal = result.columns.map((col: { name: string; type: string; original?: string }) => ({
         ...col,
         displayName: col.original || col.name,
       }));
@@ -47,6 +57,8 @@ const DataViz: React.FC = () => {
           setYField(columnsWithOriginal[1].name);
         }
       }
+    } catch (error) {
+      message.error('Failed to load table structure');
     }
     setChartOption(null);
   };
@@ -64,13 +76,14 @@ const DataViz: React.FC = () => {
         chart_type: chartType,
         x_field: xField,
         y_field: yField,
-        limit: 100,
+        limit: dataLimit,
       };
 
       const result = await generateChart(params);
       setChartOption(result.chart_config);
+      setChartDataCount(result.data.length);
       setChartKey(prev => prev + 1);
-      message.success('Chart generated successfully');
+      message.success(`Chart generated successfully with ${result.data.length} records`);
     } catch (error: any) {
       message.error(error.response?.data?.error || 'Failed to generate chart');
     } finally {
@@ -166,6 +179,25 @@ const DataViz: React.FC = () => {
             />
           </div>
 
+          {/* Data Limit */}
+          <div style={{ minWidth: 150 }}>
+            <div style={{ marginBottom: 8 }}>
+              <Text strong>Data Limit:</Text>
+            </div>
+            <Select
+              value={dataLimit}
+              onChange={setDataLimit}
+              style={{ width: '100%' }}
+              options={[
+                { label: '50 records', value: 50 },
+                { label: '100 records', value: 100 },
+                { label: '200 records', value: 200 },
+                { label: '500 records', value: 500 },
+                { label: '1000 records', value: 1000 },
+              ]}
+            />
+          </div>
+
           {/* Action Buttons */}
           <div style={{ marginLeft: 'auto' }}>
             <Space>
@@ -189,7 +221,15 @@ const DataViz: React.FC = () => {
         </Space>
       </Card>
 
-      <Card title="Chart Preview" size="small" styles={{ body: { padding: 0, height: 'calc(100vh - 280px)', minHeight: 500 } }}>
+      <Card
+        title={
+          chartOption
+            ? `Chart Preview (${chartDataCount} records)`
+            : 'Chart Preview'
+        }
+        size="small"
+        styles={{ body: { padding: 0, height: 'calc(100vh - 280px)', minHeight: 500 } }}
+      >
         {chartOption ? (
           <ReactECharts
             key={chartKey}
